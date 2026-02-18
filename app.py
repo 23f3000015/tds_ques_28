@@ -1,17 +1,13 @@
 from flask import Flask, request, Response
 from flask_cors import CORS
-from openai import OpenAI
 import os
 import json
+import requests
 
 app = Flask(__name__)
 CORS(app)
-print("ENV TOKEN:", os.getenv("AIPIPE_TOKEN"))
 
-client = OpenAI(
-    api_key=os.getenv("AIPIPE_TOKEN"),
-    base_url="https://api.aipipe.org/v1"
-)
+AIPIPE_TOKEN = os.getenv("AIPIPE_TOKEN")
 
 @app.route("/stream", methods=["POST"])
 def stream():
@@ -20,35 +16,29 @@ def stream():
 
     def generate():
         try:
-            # ✅ 1. Instant first chunk (latency fix)
+            # ✅ Immediate first chunk (latency requirement)
             yield 'data: {"choices":[{"delta":{"content":"Starting..."}}]}\n\n'
 
-            # ✅ 2. Call model with stream=True (requirement satisfied)
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                stream=True
-            )
+            url = "https://aipipe.org/openrouter/v1/chat/completions"
 
-            full_text = ""
+            headers = {
+                "Authorization": f"Bearer {AIPIPE_TOKEN}",
+                "Content-Type": "application/json"
+            }
 
-            # Collect streamed tokens
-            for chunk in response:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    full_text += chunk.choices[0].delta.content
+            payload = {
+                "model": "openai/gpt-4.1-nano",
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": True
+            }
 
-            # ✅ 3. Re-emit progressively in guaranteed multiple chunks
-            chunk_size = 150
-            for i in range(0, len(full_text), chunk_size):
-                part = full_text[i:i+chunk_size]
+            with requests.post(url, headers=headers, json=payload, stream=True) as r:
+                for line in r.iter_lines():
+                    if line:
+                        decoded = line.decode("utf-8")
 
-                payload = {
-                    "choices": [
-                        {"delta": {"content": part}}
-                    ]
-                }
-
-                yield f"data: {json.dumps(payload)}\n\n"
+                        if decoded.startswith("data: "):
+                            yield decoded + "\n\n"
 
             yield "data: [DONE]\n\n"
 
