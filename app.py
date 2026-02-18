@@ -18,7 +18,7 @@ def stream():
     data = request.get_json()
     prompt = data.get("prompt", "")
 
-    def event_stream():
+    def generate():
         try:
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -37,14 +37,16 @@ def stream():
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
 
     return Response(
-        event_stream(),
-        content_type="text/event-stream; charset=utf-8",
+        generate(),
+        mimetype="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "Connection": "keep-alive"
-        }
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        },
+        direct_passthrough=True
     )
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=10000, threaded=True)
