@@ -1,8 +1,9 @@
-from flask import Flask, request, Response
+from flask import Flask, request, Response, stream_with_context
 from flask_cors import CORS
 from openai import OpenAI
 import os
 import json
+import time
 
 app = Flask(__name__)
 CORS(app)
@@ -17,10 +18,12 @@ def stream():
     data = request.get_json()
     prompt = data.get("prompt", "")
 
+    @stream_with_context
     def generate():
         try:
-            # ✅ Immediate first chunk (latency requirement)
+            # ✅ Immediate first chunk
             yield 'data: {"choices":[{"delta":{"content":""}}]}\n\n'
+            time.sleep(0.05)
 
             completion = client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -29,8 +32,8 @@ def stream():
 
             text = completion.choices[0].message.content
 
-            # 🔥 Split into medium chunks (300 chars each)
-            chunk_size = 300
+            # 🔥 Split into 200-character chunks
+            chunk_size = 200
             for i in range(0, len(text), chunk_size):
                 part = text[i:i+chunk_size]
 
@@ -41,6 +44,7 @@ def stream():
                 }
 
                 yield f"data: {json.dumps(payload)}\n\n"
+                time.sleep(0.02)  # force separate network flush
 
             yield "data: [DONE]\n\n"
 
@@ -49,7 +53,13 @@ def stream():
 
     return Response(
         generate(),
-        content_type="text/event-stream"
+        content_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        },
+        direct_passthrough=True
     )
 
 
