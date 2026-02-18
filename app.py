@@ -20,16 +20,9 @@ def stream():
 
     def generate():
         try:
-            # 🔥 1. Immediate first chunk (latency fix)
-            first = {
-                "choices": [{"delta": {"content": ""}}]
-            }
-            yield f"data: {json.dumps(first)}\n\n"
+            # Immediate first chunk
+            yield 'data: {"choices":[{"delta":{"content":""}}]}\n\n'
 
-            # 🔥 2. Padding to force proxy flush
-            yield ":" + (" " * 2048) + "\n\n"
-
-            # 🔥 3. Get full completion
             completion = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
@@ -37,29 +30,26 @@ def stream():
 
             text = completion.choices[0].message.content
 
-            # 🔥 4. Stream character by character
-            for char in text:
+            for word in text.split():
                 payload = {
-                    "choices": [{"delta": {"content": char}}]
+                    "choices": [
+                        {"delta": {"content": word + " "}}
+                    ]
                 }
-
                 yield f"data: {json.dumps(payload)}\n\n"
-                time.sleep(0.005)
+                time.sleep(0.01)
 
             yield "data: [DONE]\n\n"
 
         except Exception as e:
-            yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
+            yield f'data: {{"error":"{str(e)}"}}\n\n'
 
     return Response(
         generate(),
-        headers={
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Transfer-Encoding": "chunked",
-        }
+        content_type="text/event-stream"
     )
 
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000, threaded=True)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port, threaded=True)
