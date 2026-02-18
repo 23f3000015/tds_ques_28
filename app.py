@@ -44,26 +44,11 @@ def stream():
             yield "data: [DONE]\n\n"
 
         except Exception as e:
-            payload = {
-                "choices": [
-                    {
-                        "delta": {
-                            "content": f"Error: {str(e)}"
-                        }
-                    }
-                ]
-            }
-            yield f"data: {json.dumps(payload)}\n\n"
+            yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
 
     return Response(
         generate(),
-        status=200,
-        headers={
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Transfer-Encoding": "chunked"
-        }
+        content_type="text/event-stream"
     )
 
 if __name__ == "__main__":
