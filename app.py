@@ -20,33 +20,31 @@ def stream():
 
     def generate():
         try:
-            # ✅ Send first token immediately (latency fix)
-            first_payload = {
-                "choices": [
-                    {"delta": {"content": ""}}
-                ]
+            # 🔥 1. Immediate first chunk (latency fix)
+            first = {
+                "choices": [{"delta": {"content": ""}}]
             }
-            yield f"data: {json.dumps(first_payload)}\n\n"
+            yield f"data: {json.dumps(first)}\n\n"
 
-            # Get full response (non-streaming for stability)
+            # 🔥 2. Padding to force proxy flush
+            yield ":" + (" " * 2048) + "\n\n"
+
+            # 🔥 3. Get full completion
             completion = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
 
-            full_text = completion.choices[0].message.content
-            words = full_text.split()
+            text = completion.choices[0].message.content
 
-            # Stream word by word
-            for word in words:
+            # 🔥 4. Stream character by character
+            for char in text:
                 payload = {
-                    "choices": [
-                        {"delta": {"content": word + " "}}
-                    ]
+                    "choices": [{"delta": {"content": char}}]
                 }
 
                 yield f"data: {json.dumps(payload)}\n\n"
-                time.sleep(0.01)  # tiny delay forces real chunking
+                time.sleep(0.005)
 
             yield "data: [DONE]\n\n"
 
@@ -55,10 +53,11 @@ def stream():
 
     return Response(
         generate(),
-        content_type="text/event-stream",
         headers={
+            "Content-Type": "text/event-stream",
             "Cache-Control": "no-cache",
-            "Connection": "keep-alive"
+            "Connection": "keep-alive",
+            "Transfer-Encoding": "chunked",
         }
     )
 
