@@ -20,30 +20,33 @@ def stream():
 
     def generate():
         try:
-            # Get full response first (non-streaming)
+            # ✅ Send first token immediately (latency fix)
+            first_payload = {
+                "choices": [
+                    {"delta": {"content": ""}}
+                ]
+            }
+            yield f"data: {json.dumps(first_payload)}\n\n"
+
+            # Get full response (non-streaming for stability)
             completion = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}]
             )
 
             full_text = completion.choices[0].message.content
-
-            # Split into words to force multiple chunks
             words = full_text.split()
 
+            # Stream word by word
             for word in words:
                 payload = {
                     "choices": [
-                        {
-                            "delta": {
-                                "content": word + " "
-                            }
-                        }
+                        {"delta": {"content": word + " "}}
                     ]
                 }
 
                 yield f"data: {json.dumps(payload)}\n\n"
-                time.sleep(0.02)  # Force progressive streaming
+                time.sleep(0.01)  # tiny delay forces real chunking
 
             yield "data: [DONE]\n\n"
 
