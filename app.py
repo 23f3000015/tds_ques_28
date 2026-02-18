@@ -1,4 +1,4 @@
-from flask import Flask, request, Response, stream_with_context
+from flask import Flask, request, Response
 from flask_cors import CORS
 from openai import OpenAI
 import os
@@ -21,9 +21,9 @@ def stream():
 
     def generate():
         try:
-            # ✅ 1. Instant first chunk (fix latency)
-            yield 'data: {"content": " "}\n\n'
-            time.sleep(0.01)
+            # 🔥 Instant first chunk (latency fix)
+            yield 'data: {"content": "Starting..."}\n\n'
+            time.sleep(0.05)
 
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -31,22 +31,15 @@ def stream():
                 stream=True
             )
 
-            chunk_count = 1
-
             for chunk in response:
                 if chunk.choices[0].delta.content:
-                    content = chunk.choices[0].delta.content
+                    text = chunk.choices[0].delta.content
 
-                    yield f'data: {json.dumps({"content": content})}\n\n'
-                    chunk_count += 1
-
-                    time.sleep(0.01)
-
-            # ✅ Ensure minimum 5 chunks
-            while chunk_count < 5:
-                yield 'data: {"content": " "}\n\n'
-                chunk_count += 1
-                time.sleep(0.01)
+                    # 🔥 Break into smaller pieces manually
+                    for i in range(0, len(text), 5):
+                        piece = text[i:i+5]
+                        yield f'data: {json.dumps({"content": piece})}\n\n'
+                        time.sleep(0.02)
 
             yield "data: [DONE]\n\n"
 
@@ -54,15 +47,16 @@ def stream():
             yield f'data: {json.dumps({"error": str(e)})}\n\n'
 
     return Response(
-        stream_with_context(generate()),
-        content_type="text/event-stream",
+        generate(),
+        mimetype="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
             "X-Accel-Buffering": "no"
-        }
+        },
+        direct_passthrough=True
     )
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=10000, threaded=True)
+
