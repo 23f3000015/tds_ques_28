@@ -3,7 +3,6 @@ from flask_cors import CORS
 from openai import OpenAI
 import os
 import json
-import time
 
 app = Flask(__name__)
 CORS(app)
@@ -20,7 +19,7 @@ def stream():
 
     def generate():
         try:
-            # Immediate first chunk
+            # ✅ Immediate first chunk (fix latency)
             yield 'data: {"choices":[{"delta":{"content":""}}]}\n\n'
 
             completion = client.chat.completions.create(
@@ -30,14 +29,18 @@ def stream():
 
             text = completion.choices[0].message.content
 
-            for word in text.split():
+            # 🔥 Break into LARGE blocks (~1200 chars)
+            block_size = 1200
+            for i in range(0, len(text), block_size):
+                block = text[i:i+block_size]
+
                 payload = {
                     "choices": [
-                        {"delta": {"content": word + " "}}
+                        {"delta": {"content": block}}
                     ]
                 }
+
                 yield f"data: {json.dumps(payload)}\n\n"
-                time.sleep(0.01)
 
             yield "data: [DONE]\n\n"
 
@@ -46,7 +49,11 @@ def stream():
 
     return Response(
         generate(),
-        content_type="text/event-stream"
+        headers={
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive"
+        }
     )
 
 
