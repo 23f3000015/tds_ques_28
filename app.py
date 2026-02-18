@@ -3,6 +3,7 @@ from flask_cors import CORS
 from openai import OpenAI
 import os
 import json
+import time
 
 app = Flask(__name__)
 CORS(app)
@@ -19,27 +20,30 @@ def stream():
 
     def generate():
         try:
-            response = client.chat.completions.create(
+            # Get full response first (non-streaming)
+            completion = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                stream=True
+                messages=[{"role": "user", "content": prompt}]
             )
 
-            for chunk in response:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    content = chunk.choices[0].delta.content
+            full_text = completion.choices[0].message.content
 
-                    payload = {
-                        "choices": [
-                            {
-                                "delta": {
-                                    "content": content
-                                }
+            # Split into words to force multiple chunks
+            words = full_text.split()
+
+            for word in words:
+                payload = {
+                    "choices": [
+                        {
+                            "delta": {
+                                "content": word + " "
                             }
-                        ]
-                    }
+                        }
+                    ]
+                }
 
-                    yield f"data: {json.dumps(payload)}\n\n"
+                yield f"data: {json.dumps(payload)}\n\n"
+                time.sleep(0.02)  # Force progressive streaming
 
             yield "data: [DONE]\n\n"
 
@@ -48,7 +52,11 @@ def stream():
 
     return Response(
         generate(),
-        content_type="text/event-stream"
+        content_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive"
+        }
     )
 
 if __name__ == "__main__":
