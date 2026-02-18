@@ -6,6 +6,7 @@ import json
 
 app = Flask(__name__)
 CORS(app)
+print("ENV TOKEN:", os.getenv("AIPIPE_TOKEN"))
 
 client = OpenAI(
     api_key=os.getenv("AIPIPE_TOKEN"),
