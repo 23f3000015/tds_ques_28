@@ -19,6 +19,9 @@ def stream():
 
     def generate():
         try:
+            # ✅ Send immediate first chunk (latency fix)
+            yield 'data: {"choices":[{"delta":{"content":""}}]}\n\n'
+
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
