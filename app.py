@@ -19,7 +19,7 @@ def stream():
 
     def generate():
         try:
-            # ✅ Send immediate first chunk (latency fix)
+            # ✅ Immediate first chunk (latency requirement)
             yield 'data: {"choices":[{"delta":{"content":""}}]}\n\n'
 
             response = client.chat.completions.create(
@@ -30,17 +30,24 @@ def stream():
 
             for chunk in response:
                 if chunk.choices and chunk.choices[0].delta.content:
-                    payload = {
-                        "choices": [
-                            {
-                                "delta": {
-                                    "content": chunk.choices[0].delta.content
-                                }
-                            }
-                        ]
-                    }
+                    content = chunk.choices[0].delta.content
 
-                    yield f"data: {json.dumps(payload)}\n\n"
+                    # 🔥 Split large streamed deltas
+                    piece_size = 50
+                    for i in range(0, len(content), piece_size):
+                        part = content[i:i+piece_size]
+
+                        payload = {
+                            "choices": [
+                                {
+                                    "delta": {
+                                        "content": part
+                                    }
+                                }
+                            ]
+                        }
+
+                        yield f"data: {json.dumps(payload)}\n\n"
 
             yield "data: [DONE]\n\n"
 
