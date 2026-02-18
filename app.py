@@ -29,22 +29,38 @@ def stream():
             for chunk in response:
                 delta = chunk.choices[0].delta
                 if delta.content:
-                    yield f"data: {json.dumps({'content': delta.content})}\n\n"
+                    sse_data = {
+                        "choices": [
+                            {
+                                "delta": {
+                                    "content": delta.content
+                                }
+                            }
+                        ]
+                    }
+                    yield f"data: {json.dumps(sse_data)}\n\n"
 
             yield "data: [DONE]\n\n"
 
         except Exception as e:
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            error_data = {
+                "choices": [
+                    {
+                        "delta": {
+                            "content": f"Error: {str(e)}"
+                        }
+                    }
+                ]
+            }
+            yield f"data: {json.dumps(error_data)}\n\n"
 
     return Response(
         generate(),
         mimetype="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
-        },
-        direct_passthrough=True
+            "Connection": "keep-alive"
+        }
     )
 
 
