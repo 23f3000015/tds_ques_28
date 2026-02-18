@@ -17,11 +17,8 @@ def stream():
     data = request.get_json()
     prompt = data.get("prompt", "")
 
-    def generate():
+    def event_stream():
         try:
-            # ✅ Immediate first chunk (latency requirement)
-            yield 'data: {"choices":[{"delta":{"content":""}}]}\n\n'
-
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
@@ -29,34 +26,46 @@ def stream():
             )
 
             for chunk in response:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    content = chunk.choices[0].delta.content
+                if not chunk.choices:
+                    continue
 
-                    # 🔥 Split large streamed deltas
-                    piece_size = 50
-                    for i in range(0, len(content), piece_size):
-                        part = content[i:i+piece_size]
+                delta = chunk.choices[0].delta
+                if not delta or not delta.content:
+                    continue
 
-                        payload = {
-                            "choices": [
-                                {
-                                    "delta": {
-                                        "content": part
-                                    }
-                                }
-                            ]
+                payload = {
+                    "choices": [
+                        {
+                            "delta": {
+                                "content": delta.content
+                            }
                         }
+                    ]
+                }
 
-                        yield f"data: {json.dumps(payload)}\n\n"
+                yield f"data: {json.dumps(payload)}\n\n"
 
             yield "data: [DONE]\n\n"
 
         except Exception as e:
-            yield f'data: {{"error":"{str(e)}"}}\n\n'
+            error_payload = {
+                "choices": [
+                    {
+                        "delta": {
+                            "content": f"Error: {str(e)}"
+                        }
+                    }
+                ]
+            }
+            yield f"data: {json.dumps(error_payload)}\n\n"
 
     return Response(
-        generate(),
-        content_type="text/event-stream"
+        event_stream(),
+        headers={
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive"
+        }
     )
 
 
