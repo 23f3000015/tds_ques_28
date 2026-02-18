@@ -1,9 +1,8 @@
-from flask import Flask, request, Response, stream_with_context
+from flask import Flask, request, Response
 from flask_cors import CORS
 from openai import OpenAI
 import os
 import json
-import time
 
 app = Flask(__name__)
 CORS(app)
@@ -18,33 +17,27 @@ def stream():
     data = request.get_json()
     prompt = data.get("prompt", "")
 
-    @stream_with_context
     def generate():
         try:
-            # ✅ Immediate first chunk
-            yield 'data: {"choices":[{"delta":{"content":""}}]}\n\n'
-            time.sleep(0.05)
-
-            completion = client.chat.completions.create(
+            response = client.chat.completions.create(
                 model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}]
+                messages=[{"role": "user", "content": prompt}],
+                stream=True
             )
 
-            text = completion.choices[0].message.content
+            for chunk in response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    payload = {
+                        "choices": [
+                            {
+                                "delta": {
+                                    "content": chunk.choices[0].delta.content
+                                }
+                            }
+                        ]
+                    }
 
-            # 🔥 Split into 200-character chunks
-            chunk_size = 200
-            for i in range(0, len(text), chunk_size):
-                part = text[i:i+chunk_size]
-
-                payload = {
-                    "choices": [
-                        {"delta": {"content": part}}
-                    ]
-                }
-
-                yield f"data: {json.dumps(payload)}\n\n"
-                time.sleep(0.02)  # force separate network flush
+                    yield f"data: {json.dumps(payload)}\n\n"
 
             yield "data: [DONE]\n\n"
 
@@ -53,13 +46,7 @@ def stream():
 
     return Response(
         generate(),
-        content_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no"
-        },
-        direct_passthrough=True
+        content_type="text/event-stream"
     )
 
 
