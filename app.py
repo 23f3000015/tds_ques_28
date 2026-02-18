@@ -19,7 +19,7 @@ def stream():
 
     def generate():
         try:
-            # ✅ Immediate first chunk (fix latency)
+            # ✅ Immediate first chunk (latency requirement)
             yield 'data: {"choices":[{"delta":{"content":""}}]}\n\n'
 
             completion = client.chat.completions.create(
@@ -29,14 +29,14 @@ def stream():
 
             text = completion.choices[0].message.content
 
-            # 🔥 Break into LARGE blocks (~1200 chars)
-            block_size = 1200
-            for i in range(0, len(text), block_size):
-                block = text[i:i+block_size]
+            # 🔥 Split into medium chunks (300 chars each)
+            chunk_size = 300
+            for i in range(0, len(text), chunk_size):
+                part = text[i:i+chunk_size]
 
                 payload = {
                     "choices": [
-                        {"delta": {"content": block}}
+                        {"delta": {"content": part}}
                     ]
                 }
 
@@ -49,14 +49,10 @@ def stream():
 
     return Response(
         generate(),
-        headers={
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive"
-        }
+        content_type="text/event-stream"
     )
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT", 8000))
     app.run(host="0.0.0.0", port=port, threaded=True)
